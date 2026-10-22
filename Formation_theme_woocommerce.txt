@@ -1,0 +1,1151 @@
+=====================================================================
+  FORMATION - CRÉER UN THÈME WORDPRESS / WOOCOMMERCE DE ZÉRO
+  Notes personnelles (à compléter au fur et à mesure)
+=====================================================================
+
+SOMMAIRE
+--------
+  1. Le projet (docker, dossiers)
+  2. Le piège du mode "Bientôt disponible" (Coming soon)
+  3. La hiérarchie des templates WordPress (quel fichier s'affiche ?)
+  4. Les templates WooCommerce et la surcharge
+  5. Le chargement du CSS (wp_enqueue_style)
+  6. Le CSS par défaut de WooCommerce
+  7. Le thème minimal (fichiers obligatoires et rôle de chacun)
+  8. Astuces de débogage
+  9. Tailwind CSS (installation, compilation, pièges)
+ 10. GSAP (animations JavaScript)
+ 11. PROCÉDURES À COPIER-COLLER (nouveau PC, tous les jours, mise en ligne)
+ 12. Historique de ce qui a été fait
+
+
+=====================================================================
+1. LE PROJET
+=====================================================================
+
+- Site local : http://localhost:8080/
+- phpMyAdmin : http://127.0.0.1:8082/
+- Lancé avec docker-compose (services : db = mariadb, wordpress, phpmyadmin).
+- Seul le dossier "wp-content" est partagé avec le conteneur :
+      ./wp-content  <=>  /var/www/html/wp-content
+  Donc : le coeur de WordPress (wp-includes, wp-admin) est DANS le conteneur,
+  et moi je ne touche qu'à wp-content (thèmes, plugins, uploads).
+
+- Mon thème : wp-content/themes/ma-boutique/
+- WooCommerce : wp-content/plugins/woocommerce/
+  => NE JAMAIS modifier les fichiers du plugin : ils sont écrasés à chaque
+     mise à jour. On surcharge depuis le thème (voir partie 4).
+
+- Problème de droits : voir Note_importante.txt (chown / chmod sur wp-content).
+
+
+=====================================================================
+2. LE PIÈGE DU MODE "BIENTÔT DISPONIBLE" (COMING SOON)
+=====================================================================
+
+J'avais créé front-page.php mais je ne voyais rien. La raison :
+WooCommerce était en mode "Coming soon" (option woocommerce_coming_soon = yes
+dans la base de données).
+
+Dans ce mode, WooCommerce REMPLACE tout le site par une page d'attente pour
+les visiteurs NON connectés. Mon thème n'est donc pas utilisé du tout.
+
+Solutions :
+  - soit regarder le site en étant CONNECTÉ en admin (le mode ne s'applique
+    pas aux admins) ;
+  - soit mettre le site en ligne :
+      WooCommerce > Réglages > Visibilité du site > "En ligne".
+
+Autre piège : le cache du navigateur => recharger avec Ctrl+F5.
+
+
+=====================================================================
+3. LA HIÉRARCHIE DES TEMPLATES WORDPRESS
+=====================================================================
+
+Principe : à chaque page demandée, WordPress se demande "c'est quoi comme
+page ?" (accueil, article, page, catégorie...). Puis il cherche dans le thème
+le fichier LE PLUS SPÉCIFIQUE qui existe. S'il ne trouve rien, il prend
+index.php (le fichier de secours universel).
+
+Doc officielle : https://developer.wordpress.org/themes/basics/template-hierarchy/
+
+---------------------------------------------------------------------
+3.1 La page d'accueil  (http://localhost:8080/)
+---------------------------------------------------------------------
+Ordre de recherche :
+
+    front-page.php   <- LE PLUS PRIORITAIRE, quels que soient les réglages
+    home.php         <- si l'accueil affiche "les derniers articles"
+    index.php        <- secours
+
+=> La formation a raison : front-page.php "domine" pour l'accueil.
+   MAIS SEULEMENT pour l'accueil (http://localhost:8080/) !
+   Il ne "domine" pas tout le site : /shop/, /product/xxx/, /cart/...
+   ont chacun leur propre template (voir partie 4).
+   (Piège vécu : sur /shop/ je voyais mes produits et pas front-page.php,
+    c'est normal : /shop/ utilise archive-product.php du plugin.)
+
+Au début (thème Underscores), il n'y avait ni front-page.php ni home.php,
+donc c'était index.php qui affichait la boucle des articles => un "blog".
+On le voit dans le HTML : <body class="home blog ...">.
+Le réglage "derniers articles / page statique" est dans :
+    Réglages > Lecture.
+
+---------------------------------------------------------------------
+3.2 Les autres types de pages (thème classique)
+---------------------------------------------------------------------
+    Un article (post)    : single.php     -> index.php
+    Une page             : page.php       -> index.php
+    Catégorie / archive  : archive.php    -> index.php
+    Recherche            : search.php     -> index.php
+    Erreur 404           : 404.php        -> index.php
+
+---------------------------------------------------------------------
+3.3 Les morceaux de templates (partials)
+---------------------------------------------------------------------
+Un template n'écrit pas tout le HTML lui-même, il appelle des morceaux :
+
+    get_header();               -> charge header.php
+    get_footer();               -> charge footer.php
+    get_sidebar();              -> charge sidebar.php
+    get_template_part('a/b');   -> charge a/b.php
+
+Exemple : l'ancien index.php d'Underscores faisait :
+    index.php
+     |- get_header()   -> header.php  (<html>, <head>, wp_head(), menu)
+     |- boucle have_posts()
+     |     \- get_template_part('template-parts/content') -> un article
+     |- get_sidebar()  -> sidebar.php
+     \- get_footer()   -> footer.php  (wp_footer(), </html>)
+
+IMPORTANT : un template sans get_header() n'appelle pas wp_head()
+=> AUCUN CSS / JS n'est chargé. (Mon premier front-page.php qui faisait juste
+   echo 'front-page'; affichait du texte brut sans style : c'est normal.)
+
+EXPÉRIENCE : j'ai commenté get_header() dans front-page.php
+=> la page affichait "une sorte de liste de menus" sans style.
+C'était la BARRE D'ADMINISTRATION (la barre noire en haut quand je suis
+connecté : Tableau de bord, Personnaliser, Créer, Modifier, Howdy...).
+
+Pourquoi ?
+  - get_header() charge header.php, qui contient <!doctype>, <html>,
+    <head>, wp_head() et <body>.
+  - Sans lui : pas de wp_head() => le CSS de la barre d'admin
+    (admin-bar.css, dashicons) n'est jamais imprimé.
+  - get_footer() est toujours là => footer.php appelle wp_footer().
+    WordPress affiche la barre d'admin dans wp_footer() en "secours"
+    (pour les thèmes qui n'appellent pas wp_body_open()).
+  - Résultat : le HTML de la barre (des listes <ul><li> imbriquées) est
+    affiché, mais SANS son CSS => une liste de liens brute.
+  - Le CSS "oublié" n'est PAS rattrapé dans le footer : wp_footer()
+    n'imprime que les CSS/JS déclarés "pour le footer", pas ceux du <head>.
+  - En plus la page n'a ni <!doctype>, ni <head>, ni <body> : HTML invalide,
+    le navigateur passe en mode "quirks" (rendu à l'ancienne).
+  - Un visiteur NON connecté ne verrait pas cette liste (pas de barre
+    d'admin pour lui), juste mon <h1> et le footer, sans aucun style.
+
+Ce que fait get_header() exactement :
+  1. déclenche le hook 'get_header' (des plugins peuvent s'y accrocher)
+  2. inclut header.php du thème
+     (get_header('shop') inclurait header-shop.php s'il existe,
+      sinon header.php)
+  C'est tout ! Toute la "magie" est dans le contenu de header.php,
+  surtout wp_head().
+  get_footer() fait pareil avec footer.php (et wp_footer() dedans).
+
+=> Toujours encadrer un template par get_header() / get_footer().
+
+---------------------------------------------------------------------
+3.4 La boucle (The Loop)
+---------------------------------------------------------------------
+    while ( have_posts() ) :   // tant qu'il y a des contenus à afficher
+        the_post();            // on prépare le contenu suivant
+        the_title();           // affiche le titre
+        the_content();         // affiche le contenu
+    endwhile;
+
+C'est la même boucle pour un article, une page, une liste d'articles :
+WordPress a déjà fait la requête selon l'URL, la boucle parcourt le résultat.
+
+
+=====================================================================
+4. LES TEMPLATES WOOCOMMERCE ET LA SURCHARGE
+=====================================================================
+
+WooCommerce INTERCEPTE le choix du template pour ses pages (boutique,
+produit, catégorie produit).
+
+---------------------------------------------------------------------
+4.1 Exemple : la boutique  (http://localhost:8080/shop/)
+---------------------------------------------------------------------
+Ordre de recherche :
+
+    ma-boutique/woocommerce.php
+        <- s'il existe, il sert pour TOUTES les pages WooCommerce
+           (déconseillé si on veut personnaliser finement)
+    ma-boutique/woocommerce/archive-product.php
+        <- ma version personnalisée (surcharge)
+    plugins/woocommerce/templates/archive-product.php
+        <- celle du plugin (utilisée par défaut)
+
+Le template du plugin appelle lui-même MON header.php / footer.php
+(get_header('shop') / get_footer('shop')), puis pour chaque produit
+content-product.php.
+
+---------------------------------------------------------------------
+4.2 Correspondance URL -> template WooCommerce
+---------------------------------------------------------------------
+    /shop/                     -> archive-product.php
+    /product/xxx/              -> single-product.php
+                                  (puis content-single-product.php)
+    /product-category/xxx/     -> taxonomy-product-cat.php
+                                  (qui renvoie vers archive-product.php)
+    /cart/, /checkout/,
+    /my-account/               -> ce sont des PAGES WordPress normales
+                                  => affichées par page.php (ou index.php)
+                                  et leur contenu (blocs ou shortcode)
+                                  charge les templates cart/, checkout/,
+                                  myaccount/.
+
+---------------------------------------------------------------------
+4.3 LA RÈGLE D'OR : LA SURCHARGE DE TEMPLATE
+---------------------------------------------------------------------
+Pour modifier un template WooCommerce :
+  1. le COPIER depuis  wp-content/plugins/woocommerce/templates/
+  2. vers             wp-content/themes/ma-boutique/woocommerce/
+  3. en gardant EXACTEMENT le même chemin (sans le "templates/").
+
+Exemples :
+    plugins/woocommerce/templates/single-product.php
+        -> ma-boutique/woocommerce/single-product.php
+    plugins/woocommerce/templates/cart/cart.php
+        -> ma-boutique/woocommerce/cart/cart.php
+
+WooCommerce prendra alors MA version à la place de la sienne.
+Doc : https://woocommerce.com/document/template-structure/
+
+---------------------------------------------------------------------
+4.4 Déclarer le support WooCommerce
+---------------------------------------------------------------------
+Dans functions.php :
+    add_theme_support( 'woocommerce' );
+Sans ça, WooCommerce considère que le thème n'est pas "compatible" et
+utilise un mode de compatibilité.
+
+---------------------------------------------------------------------
+4.5 Les hooks (actions / filtres)  - notion de base
+---------------------------------------------------------------------
+WordPress et WooCommerce sont pleins de "points d'accroche" (hooks).
+    add_action( 'nom_du_hook', 'ma_fonction' );
+        => "quand WordPress arrive à ce moment-là, exécute ma_fonction"
+    add_filter( 'nom_du_filtre', 'ma_fonction' );
+        => "avant d'utiliser cette valeur, passe-la dans ma_fonction
+            pour que je puisse la modifier" (la fonction doit RETOURNER
+            la valeur).
+
+Exemple vu dans Underscores (inc/woocommerce.php) : il remplaçait les
+balises qui entourent le contenu WooCommerce par les siennes :
+    remove_action( 'woocommerce_before_main_content', 'woocommerce_output_content_wrapper', 10 );
+    add_action( 'woocommerce_before_main_content', 'ma_fonction_qui_ouvre_main' );
+
+
+---------------------------------------------------------------------
+4.6 Modifier la page produit : SURCHARGE ou HOOKS ?
+---------------------------------------------------------------------
+Oui, on peut copier le template du plugin dans le thème et le modifier.
+MAIS il faut copier le BON fichier, et souvent un hook suffit.
+
+La page produit est faite de 3 niveaux :
+
+  single-product.php            la "coquille" : get_header('shop'),
+  |                             boucle, get_footer('shop'). Presque rien.
+  \- content-single-product.php la structure : <div class="product">
+     |                          + 5 hooks (do_action) seulement.
+     \- single-product/*.php    les petits morceaux :
+                                title.php, price.php, rating.php,
+                                short-description.php, meta.php,
+                                product-image.php, add-to-cart/...,
+                                tabs/..., related.php...
+
+Les morceaux sont "branchés" sur les hooks par WooCommerce
+(fichier plugins/woocommerce/includes/wc-template-hooks.php).
+Le chiffre = la PRIORITÉ = l'ORDRE d'affichage (petit = d'abord) :
+
+  woocommerce_before_single_product_summary
+      10  badge promo        (woocommerce_show_product_sale_flash)
+      20  images             (woocommerce_show_product_images)
+
+  woocommerce_single_product_summary   (la colonne de droite)
+       5  titre              (woocommerce_template_single_title)
+      10  étoiles            (woocommerce_template_single_rating)
+      10  prix               (woocommerce_template_single_price)
+      20  description courte (woocommerce_template_single_excerpt)
+      30  bouton panier      (woocommerce_template_single_add_to_cart)
+      40  méta (UGS, catég.) (woocommerce_template_single_meta)
+      50  partage            (woocommerce_template_single_sharing)
+
+  woocommerce_after_single_product_summary
+      10  onglets            (woocommerce_output_product_data_tabs)
+      15  ventes incitatives (woocommerce_upsell_display)
+      20  produits apparentés(woocommerce_output_related_products)
+
+=> Pour CHANGER L'ORDRE ou ENLEVER un élément : un HOOK dans functions.php,
+   pas besoin de copier un template.
+
+   // Mettre le prix APRÈS le bouton panier :
+   remove_action( 'woocommerce_single_product_summary', 'woocommerce_template_single_price', 10 );
+   add_action(    'woocommerce_single_product_summary', 'woocommerce_template_single_price', 35 );
+
+   // Enlever les produits apparentés :
+   remove_action( 'woocommerce_after_single_product_summary', 'woocommerce_output_related_products', 20 );
+
+   // Ajouter MON contenu sous le bouton panier :
+   add_action( 'woocommerce_single_product_summary', function () {
+       echo '<p>Livraison offerte dès 50 EUR</p>';
+   }, 31 );
+
+   ATTENTION : remove_action doit avoir EXACTEMENT le même hook, la même
+   fonction et la même priorité que le add_action d'origine.
+
+=> Pour CHANGER LE HTML d'un morceau (balises, classes) : SURCHARGE du
+   petit fichier concerné uniquement.
+   ex : changer le HTML du prix
+     plugins/woocommerce/templates/single-product/price.php
+     -> themes/ma-boutique/woocommerce/single-product/price.php
+
+=> Pour tout restructurer (ex : mise en page complètement différente) :
+   surcharger content-single-product.php (en GARDANT les do_action dedans,
+   sinon les plugins et les morceaux ne s'affichent plus).
+
+Règle : copier LE PLUS PETIT fichier possible, et préférer les hooks.
+
+POURQUOI ? Les mises à jour.
+  Chaque template a un numéro de version en haut :  @version 3.6.0
+  Quand WooCommerce modifie son template, ma copie devient "périmée"
+  (elle ne reçoit pas les corrections). WooCommerce le signale dans :
+      WooCommerce > État > (en bas) "Templates" -> "outdated" en rouge.
+  Il faut alors recomparer ma copie avec la nouvelle version.
+  Moins j'ai de fichiers copiés, moins j'ai de travail de maintenance.
+  Les hooks, eux, ne cassent presque jamais.
+
+
+=====================================================================
+5. LE CHARGEMENT DU CSS (wp_enqueue_style)
+=====================================================================
+
+Dans WordPress, on N'ÉCRIT PAS les <link rel="stylesheet"> à la main dans
+header.php. On les "enregistre" en PHP dans functions.php :
+
+    function ma_boutique_scripts() {
+        wp_enqueue_style(
+            'ma-boutique-style',      // nom unique (handle)
+            get_stylesheet_uri(),     // URL de style.css du thème
+            array(),                  // dépendances (autres CSS avant)
+            '1.0.0'                   // version (évite le cache navigateur)
+        );
+    }
+    add_action( 'wp_enqueue_scripts', 'ma_boutique_scripts' );
+
+Puis c'est wp_head() (dans header.php) qui IMPRIME tous les <link> et
+<style> enregistrés. Dans le HTML on retrouve le handle :
+    <link rel='stylesheet' id='ma-boutique-style-css' href='.../style.css?ver=1.0.0'>
+
+Pareil pour le JS : wp_enqueue_script(), imprimé par wp_head() ou
+wp_footer().
+
+=> C'est pour ça que wp_head() et wp_footer() sont INDISPENSABLES :
+   sans eux, ni WordPress, ni WooCommerce, ni moi ne pouvons charger
+   CSS / JS (le panier, l'ajout au panier en AJAX... ne marchent plus).
+
+
+=====================================================================
+6. LE CSS PAR DÉFAUT DE WOOCOMMERCE
+=====================================================================
+
+Sur /shop/, WooCommerce charge 3 fichiers CSS
+(dossier wp-content/plugins/woocommerce/assets/css/) :
+
+  handle                    fichier                     rôle
+  ------------------------  --------------------------  ---------------------------
+  woocommerce-layout        woocommerce-layout.css      MISE EN PAGE (~20 Ko) :
+                            grille des produits (colonnes, largeurs),
+                            galerie / résumé sur la fiche produit, tableau du
+                            panier, colonnes du checkout.
+
+  woocommerce-smallscreen   woocommerce-smallscreen.css RESPONSIVE (~9 Ko) :
+                            appliqué seulement sous 768px
+                            (media="only screen and (max-width: 768px)") :
+                            produits sur 2 colonnes, panier empilé...
+
+  woocommerce-general       woocommerce.css             APPARENCE (~93 Ko) :
+                            boutons violets, badge "Promo !", étoiles des avis,
+                            prix, onglets fiche produit, messages ("Produit
+                            ajouté au panier"), formulaires, mini-panier.
+
+Mon style.css (ma-boutique-style) est chargé APRÈS => à spécificité égale,
+mes règles gagnent.
+
+Ils arrivent dans la page via wp_head() (WooCommerce s'accroche au hook).
+
+Les autres <style id="..."> qu'on voit dans le code source :
+  - woocommerce-inline-inline-css : mini bout de CSS WooCommerce
+  - wp-block-library, global-styles, classic-theme-styles : WordPress
+    (styles des blocs de l'éditeur)
+  - wp-emoji-styles, wp-img-auto-sizes... : WordPress
+
+---------------------------------------------------------------------
+6.1 Désactiver le CSS WooCommerce (dans functions.php)
+---------------------------------------------------------------------
+  // Tout désactiver (style 100% custom, ce que faisait Underscores) :
+  add_filter( 'woocommerce_enqueue_styles', '__return_empty_array' );
+
+  // Ou en désactiver seulement certains
+  // (ex : garder la mise en page, enlever l'apparence) :
+  add_filter( 'woocommerce_enqueue_styles', function ( $styles ) {
+      unset( $styles['woocommerce-general'] );
+      return $styles;
+  } );
+
+Conseil : les garder au début, inspecter avec F12 les classes utilisées
+(.products, .product, .price, .button, .onsale...), puis désactiver quand
+je suis prêt à tout styler moi-même.
+Si on enlève woocommerce-layout, la grille des produits devient une liste
+verticale.
+
+
+=====================================================================
+7. LE THÈME MINIMAL
+=====================================================================
+
+Fichiers OBLIGATOIRES pour qu'un thème existe :
+  - style.css  avec l'en-tête en commentaire (au moins "Theme Name:")
+  - index.php
+
+(Quand j'ai tout supprimé au début, j'ai eu une erreur dans l'admin parce
+que ces fichiers manquaient => le thème était "cassé".)
+
+Mon thème actuel :
+
+  wp-content/themes/ma-boutique/
+  |- style.css       en-tête du thème + mon CSS
+  |- functions.php   réglages : title-tag, post-thumbnails,
+  |                  add_theme_support('woocommerce'), chargement de style.css
+  |- header.php      <!doctype>, <html>, <head>, wp_head(), <body>,
+  |                  body_class(), wp_body_open(), <header>, ouverture <main>
+  |- footer.php      fermeture </main>, <footer>, wp_footer(), </body></html>
+  |- index.php       secours : get_header() + boucle + get_footer()
+  |- front-page.php  page d'accueil : get_header() + contenu + get_footer()
+  \- screenshot.png  image du thème dans Apparence > Thèmes
+
+Détail des fonctions utilisées dans header.php :
+  language_attributes()  -> ajoute lang="fr-FR" sur <html>
+  bloginfo('charset')    -> UTF-8
+  wp_head()              -> imprime CSS, JS, <title>, meta... (INDISPENSABLE)
+  body_class()           -> ajoute des classes utiles sur <body>
+                            (home, woocommerce, woocommerce-shop, single-product...)
+                            => très pratique pour cibler une page en CSS
+  wp_body_open()         -> hook juste après <body> (utilisé par des plugins)
+  home_url('/')          -> URL de l'accueil
+  bloginfo('name')       -> nom du site (Réglages > Général)
+  esc_url(), esc_html()  -> sécurité : "échapper" ce qu'on affiche
+
+Détail de functions.php :
+  add_theme_support('title-tag')       -> WordPress gère la balise <title>
+  add_theme_support('post-thumbnails') -> images à la une / images produits
+  add_theme_support('woocommerce')     -> thème compatible WooCommerce
+  hook 'after_setup_theme'             -> moment où l'on déclare les supports
+  hook 'wp_enqueue_scripts'            -> moment où l'on charge CSS / JS
+
+Squelette à suivre pour tout nouveau template :
+    <?php get_header(); ?>
+        ... mon contenu ...
+    <?php get_footer(); ?>
+
+
+---------------------------------------------------------------------
+7.1 Le logo (custom-logo)
+---------------------------------------------------------------------
+1. Activer le support dans functions.php (dans ma_boutique_setup) :
+     add_theme_support( 'custom-logo', array(
+         'height'      => 200,
+         'width'       => 200,
+         'flex-height' => true,
+         'flex-width'  => true,
+     ) );
+   => ajoute "Logo" dans Apparence > Personnaliser > Identité du site.
+   ATTENTION : height / width ici = taille CONSEILLÉE pour le recadrage
+   dans le Customizer. Ça NE fixe PAS la taille d'affichage sur le site.
+
+2. L'afficher dans header.php :
+     <?php if ( function_exists( 'the_custom_logo' ) ) { the_custom_logo(); } ?>
+
+   HTML généré par WordPress :
+     <span class="custom-logo-link">          (ou <a> sur les autres pages)
+         <img width="1024" height="1024" class="custom-logo" src="...logo.jpeg" ...>
+     </span>
+   (<span> sur l'accueil car 'unlink-homepage-logo' => true, sinon un lien <a>.)
+
+PIÈGE VÉCU : j'avais mis la taille sur la div qui entoure le logo :
+     .logo { width: 200px; height: 200px; }
+=> le logo restait énorme.
+Pourquoi : la div fait bien 200x200, mais l'<img> à l'intérieur garde SA
+propre taille (attributs width="1024" height="1024" = taille réelle du
+fichier). Une image ne rétrécit pas toute seule pour rentrer dans son
+parent : elle DÉBORDE.
+
+Solution : cibler l'image elle-même :
+     .logo img {               /* ou .custom-logo */
+         width: 100%;
+         height: 100%;
+         object-fit: contain;  /* garde les proportions */
+     }
+Règle générale : en CSS, la taille d'un parent ne s'applique pas
+automatiquement aux images dedans. Réflexe utile pour toutes les images :
+     img { max-width: 100%; height: auto; }
+
+Astuce : F12 > clic droit sur l'élément > Inspecter, pour voir le VRAI
+HTML généré par WordPress et savoir quelle classe cibler.
+
+PIÈGE VÉCU n°2 : j'ai mis la taille sur .custom-logo-link => rien ne change.
+Deux raisons :
+  1. .custom-logo-link est le <span> AUTOUR de l'image, pas l'image
+     (même erreur que la div .logo).
+  2. Un <span> (ou un <a>) est un élément "inline" : en CSS, width et
+     height sont IGNORÉS sur un élément inline (il faudrait
+     display: inline-block ou block).
+La bonne classe = celle de l'<img> : .custom-logo
+     .custom-logo {
+         width: 50px;
+         height: 50px;
+         object-fit: contain;
+     }
+
+"Mais dans l'inspecteur je vois toujours <img width="1024" height="1024"> !"
+=> C'est NORMAL et on ne les enlève pas.
+  - Ces attributs HTML sont une simple "indication" de taille : ils ont la
+    priorité LA PLUS FAIBLE. N'importe quelle règle CSS les écrase.
+  - L'inspecteur montre le HTML (il ne change pas). Pour voir la taille
+    RÉELLE affichée : F12 > onglet "Calculé" (Computed), ou survoler l'image.
+  - Ils sont utiles : ils donnent le ratio largeur/hauteur au navigateur
+    AVANT le chargement de l'image => la page ne "saute" pas (moins de
+    décalage de mise en page, bon pour le référencement).
+  - Si mon CSS ne s'applique pas : vérifier dans F12 > Styles que ma règle
+    apparaît (sinon : mauvaise classe, ou cache => Ctrl+F5).
+
+Ordre de priorité à retenir (du plus faible au plus fort) :
+  attributs HTML width/height  <  CSS des fichiers (selon spécificité)
+  <  style="..." en ligne  <  !important
+
+
+=====================================================================
+8. ASTUCES DE DÉBOGAGE
+=====================================================================
+
+- Savoir quel template est utilisé : ajouter temporairement dans
+  functions.php :
+
+    add_action( 'wp_footer', function () {
+        global $template;
+        echo '<!-- ' . $template . ' -->';
+    } );
+
+  puis Ctrl+U (code source) et chercher le commentaire en bas de page.
+
+- Plugin "Query Monitor" : montre le template, les hooks, les requêtes,
+  les CSS/JS chargés.
+
+- Lire les classes du <body> (F12) : elles disent quel type de page c'est.
+
+- Voir les CSS chargés : Ctrl+U et chercher "stylesheet", ou F12 > Réseau.
+
+
+=====================================================================
+9. TAILWIND CSS (v4)
+=====================================================================
+
+Principe : Tailwind n'est PAS un fichier CSS qu'on charge tel quel.
+C'est un OUTIL (en Node.js) qui :
+  1. lit mes fichiers .php
+  2. repère les classes utilisées (text-3xl, bg-red-600, flex...)
+  3. génère un fichier CSS qui contient UNIQUEMENT ces classes.
+=> Il faut "compiler" (build) le CSS, puis WordPress charge le résultat.
+   WordPress (PHP) ne connaît rien à Tailwind : il charge juste un .css.
+
+---------------------------------------------------------------------
+9.1 Installation (déjà faite, dans le dossier du thème)
+---------------------------------------------------------------------
+  cd wp-content/themes/ma-boutique
+  npm init -y                                   -> crée package.json
+  npm install -D tailwindcss @tailwindcss/cli   -> installe dans node_modules/
+
+  (Node.js et npm doivent être installés sur le PC : node -v / npm -v.
+   On les lance sur MON PC, pas dans le conteneur docker.)
+
+  -D = "devDependencies" = outil de DÉVELOPPEMENT : sert à fabriquer le
+  CSS sur mon PC, mais n'est pas envoyé au navigateur.
+
+  => Sur un AUTRE ordinateur, on ne refait PAS tout ça : voir partie 11.
+
+---------------------------------------------------------------------
+9.2 Les fichiers
+---------------------------------------------------------------------
+  ma-boutique/
+  |- package.json        liste des outils + les commandes (scripts)
+  |- node_modules/       les outils installés (ne pas toucher, ne pas
+  |                      mettre en ligne ; se recrée avec "npm install")
+  |- src/input.css       MON fichier source Tailwind (je l'édite)
+  \- assets/css/main.css le CSS GÉNÉRÉ (ne JAMAIS l'éditer à la main :
+                         il est écrasé à chaque compilation)
+
+src/input.css :
+    @import "tailwindcss" source(none);   // charge Tailwind, sans
+                                          // détection automatique
+    @source "../**/*.php";                // cherche les classes dans
+                                          // tous les .php du thème
+    @source not "../node_modules";        // sauf node_modules
+
+  Les chemins dans @source sont relatifs à src/input.css
+  (d'où le "../" pour remonter à la racine du thème).
+
+---------------------------------------------------------------------
+9.3 Les commandes (dans le dossier du thème)
+---------------------------------------------------------------------
+  npm run watch   -> PENDANT QUE JE CODE : laisse tourner dans un
+                     terminal, recompile à chaque sauvegarde d'un .php.
+                     (Ctrl+C pour arrêter.)
+  npm run build   -> version finale minifiée (avant mise en ligne).
+
+  Définies dans package.json :
+    "build": "tailwindcss -i ./src/input.css -o ./assets/css/main.css --minify"
+    "watch": "tailwindcss -i ./src/input.css -o ./assets/css/main.css --watch"
+    (-i = input / fichier source, -o = output / fichier généré)
+
+PIÈGE : si j'ajoute une classe et qu'elle ne marche pas => le watch ne
+tourne pas, donc la classe n'est pas dans main.css. Lancer npm run watch
+(ou npm run build), puis Ctrl+F5.
+
+---------------------------------------------------------------------
+9.4 Chargement dans WordPress (functions.php)
+---------------------------------------------------------------------
+  $uri = get_template_directory_uri();
+
+  wp_enqueue_style( 'ma-boutique-tailwind', $uri . '/assets/css/main.css',
+      array(), ma_boutique_version( 'assets/css/main.css' ) );
+
+  wp_enqueue_style( 'ma-boutique-style', get_stylesheet_uri(),
+      array( 'ma-boutique-tailwind' ), ... );
+
+  - get_template_directory()     = CHEMIN sur le disque (pour PHP)
+    get_template_directory_uri() = URL (pour le navigateur)
+  - ma_boutique_version() = MA petite fonction (dans functions.php) :
+      function ma_boutique_version( $file ) {
+          $path = get_template_directory() . '/' . $file;
+          return file_exists( $path ) ? filemtime( $path ) : null;
+      }
+    filemtime() = date de modification du fichier, utilisée comme
+    version (?ver=...) => change à chaque compilation => plus de
+    problème de cache navigateur.
+    file_exists() = si le fichier n'existe pas encore (npm install pas
+    lancé sur ce PC), pas d'erreur PHP : le site s'affiche (sans style).
+  - array( 'ma-boutique-tailwind' ) = dépendance : style.css est chargé
+    APRÈS Tailwind => mes règles perso de style.css gagnent.
+  - style.css reste OBLIGATOIRE (en-tête "Theme Name") ; je peux y garder
+    quelques règles perso, ou le laisser presque vide.
+
+---------------------------------------------------------------------
+9.5 Utilisation
+---------------------------------------------------------------------
+  <h1 class="text-3xl font-bold text-red-600">Accueil</h1>
+  <header class="flex items-center justify-between p-4 bg-white shadow">
+
+  Doc des classes : https://tailwindcss.com/docs
+
+PIÈGE : Tailwind lit le TEXTE des fichiers, il n'exécute pas le PHP.
+  Les classes doivent être écrites EN ENTIER :
+    OK    : <?php $c = $promo ? 'text-red-600' : 'text-gray-900'; ?>
+    PAS OK: <?php $c = 'text-' . $couleur . '-600'; ?>  (jamais détecté)
+
+PIÈGE : Tailwind ne voit QUE les fichiers de MON thème.
+  Le HTML généré par WooCommerce (templates du plugin) ou par WordPress
+  (the_custom_logo(), menus...) n'a pas mes classes. Solutions :
+    - surcharger le template WooCommerce dans ma-boutique/woocommerce/
+      et y mettre mes classes (le fichier est dans le thème => scanné) ;
+    - ou cibler leurs classes à eux avec @apply dans src/input.css :
+        .custom-logo { @apply w-12 h-12 object-contain; }
+        .woocommerce ul.products li.product .price { @apply text-red-600 font-bold; }
+
+PIÈGE : "Preflight" = la remise à zéro CSS de Tailwind. Tous les titres
+  ont la même taille, les listes n'ont plus de puces, les boutons n'ont
+  plus de style... C'est voulu : on style tout avec des classes.
+  Ça peut aussi changer l'apparence du CSS par défaut de WooCommerce
+  (partie 6). Pour un thème 100% Tailwind, on finira sûrement par
+  désactiver le CSS WooCommerce (woocommerce_enqueue_styles).
+
+Mise en ligne : envoyer assets/css/main.css (compilé avec npm run build),
+pas besoin d'envoyer node_modules/ ni src/.
+
+
+=====================================================================
+10. GSAP (ANIMATIONS JAVASCRIPT)
+=====================================================================
+
+GSAP = librairie JavaScript d'animation (version 3.15.0).
+Gratuite, même pour un site commercial, plugins compris (ScrollTrigger...).
+Doc : https://gsap.com/docs/v3/
+
+Différence avec Tailwind : GSAP n'a RIEN À COMPILER. C'est un fichier .js
+que le navigateur exécute tel quel. WordPress doit juste le charger.
+
+---------------------------------------------------------------------
+10.1 Installation (déjà faite)
+---------------------------------------------------------------------
+  cd wp-content/themes/ma-boutique
+  npm install gsap        (sans -D : c'est du code envoyé au navigateur,
+                           une vraie "dependency")
+
+Problème : WordPress ne sait pas aller chercher dans node_modules/.
+=> J'ai créé un petit script qui COPIE les fichiers utiles vers
+   assets/js/vendor/ ("vendor" = code d'un tiers, que je ne modifie pas) :
+
+   scripts/copy-vendor.js
+       node_modules/gsap/dist/gsap.min.js          -> assets/js/vendor/gsap.min.js
+       node_modules/gsap/dist/ScrollTrigger.min.js -> assets/js/vendor/ScrollTrigger.min.js
+
+   Lancé par : npm run vendor
+   ET automatiquement après chaque "npm install" grâce à "postinstall".
+
+Pour ajouter un autre plugin GSAP plus tard (ex : SplitText) :
+  1. ajouter une ligne dans le tableau "files" de scripts/copy-vendor.js :
+       ['gsap/dist/SplitText.min.js', 'SplitText.min.js'],
+  2. npm run vendor
+  3. wp_register_script( 'gsap-splittext', ... ) dans functions.php
+     (copier la ligne de ScrollTrigger)
+  4. l'ajouter en dépendance du script qui l'utilise
+  5. dans le JS : gsap.registerPlugin( SplitText );
+
+Mettre à jour GSAP : npm update gsap   (le postinstall recopie les fichiers ;
+sinon npm run vendor).
+
+---------------------------------------------------------------------
+10.2 Les fichiers
+---------------------------------------------------------------------
+  ma-boutique/
+  |- scripts/copy-vendor.js       copie GSAP de node_modules vers vendor
+  \- assets/js/
+     |- vendor/                   GÉNÉRÉ par npm run vendor (ne pas éditer)
+     |  |- gsap.min.js
+     |  \- ScrollTrigger.min.js
+     |- animations-home.js        MES animations de l'accueil
+     \- animations-shop.js        MES animations de la boutique
+
+Découpage : UN fichier d'animations PAR TYPE DE PAGE.
+  - chaque page ne charge que le JS dont elle a besoin (plus rapide) ;
+  - pas d'erreur "GSAP target not found" (ex : animer les produits sur
+    la page panier où ils n'existent pas) ;
+  - je m'y retrouve facilement.
+
+Règle : PHP = le HTML, CSS = le style, JS = le comportement.
+  Pas de <script>gsap...</script> dans les fichiers .php.
+
+---------------------------------------------------------------------
+10.3 Chargement dans WordPress (functions.php)
+---------------------------------------------------------------------
+wp_enqueue_script() = comme wp_enqueue_style(), mais pour le JS :
+
+  wp_enqueue_script( 'nom-unique', 'url.js', array( dépendances ), version,
+                     array( 'in_footer' => true ) );
+
+  - dépendances : "charge ces scripts AVANT le mien". Indispensable :
+    mon code utilise "gsap", il doit exister avant.
+  - in_footer => true : le script est imprimé par wp_footer(), en bas de
+    page => le HTML est déjà là quand le script s'exécute, et la page
+    s'affiche plus vite.
+
+Deux fonctions différentes :
+  wp_register_script() = je DÉCLARE le fichier, mais il n'est pas chargé.
+  wp_enqueue_script()  = je le CHARGE sur la page.
+  Un script "register" est chargé automatiquement dès qu'un script
+  "enqueue" le met dans ses dépendances.
+  => GSAP est "register" : il n'est chargé QUE sur les pages qui ont
+     des animations (pas sur le panier, par exemple).
+
+Mon code :
+
+  $footer = array( 'in_footer' => true );
+
+  // Librairies : déclarées, pas chargées
+  wp_register_script( 'gsap', $uri . '/assets/js/vendor/gsap.min.js',
+      array(), ..., $footer );
+  wp_register_script( 'gsap-scrolltrigger', $uri . '/assets/js/vendor/ScrollTrigger.min.js',
+      array( 'gsap' ), ..., $footer );
+
+  // Accueil
+  if ( is_front_page() ) {
+      wp_enqueue_script( 'ma-boutique-anim-home', $uri . '/assets/js/animations-home.js',
+          array( 'gsap' ), ..., $footer );
+  }
+
+  // Boutique + catégories/étiquettes de produits
+  if ( function_exists( 'is_shop' ) && ( is_shop() || is_product_taxonomy() ) ) {
+      wp_enqueue_script( 'ma-boutique-anim-shop', $uri . '/assets/js/animations-shop.js',
+          array( 'gsap', 'gsap-scrolltrigger' ), ..., $footer );
+  }
+
+  function_exists( 'is_shop' ) : is_shop() est une fonction de
+  WooCommerce. Si WooCommerce est désactivé, elle n'existe pas et
+  appeler is_shop() ferait planter TOUT le site (erreur fatale).
+
+Résultat vérifié :
+  /        -> gsap.min.js + animations-home.js
+  /shop/   -> gsap.min.js + ScrollTrigger.min.js + animations-shop.js
+  /cart/   -> aucun JS d'animation
+
+Les fonctions conditionnelles (les "conditional tags") :
+  WordPress   : is_front_page(), is_home(), is_page(), is_single(),
+                is_page('contact')  (une page précise, par son slug)
+  WooCommerce : is_shop()               boutique
+                is_product()            fiche produit
+                is_product_category()   catégorie de produits
+                is_product_taxonomy()   catégorie OU étiquette OU attribut
+                is_cart(), is_checkout(), is_account_page()
+                is_woocommerce()        n'importe quelle page "catalogue"
+  ATTENTION : elles ne marchent qu'à partir du moment où WordPress sait
+  quelle page est demandée => OK dans 'wp_enqueue_scripts' et dans les
+  templates, PAS directement en haut de functions.php.
+
+Ajouter une nouvelle page animée (ex : fiche produit) :
+  1. créer assets/js/animations-product.js
+  2. dans functions.php, copier un bloc if et adapter :
+       if ( function_exists( 'is_product' ) && is_product() ) {
+           wp_enqueue_script( 'ma-boutique-anim-product',
+               $uri . '/assets/js/animations-product.js',
+               array( 'gsap' ),
+               ma_boutique_version( 'assets/js/animations-product.js' ),
+               $footer );
+       }
+  3. Ctrl+F5, puis F12 > Console pour voir les erreurs éventuelles.
+
+---------------------------------------------------------------------
+10.4 Écrire une animation
+---------------------------------------------------------------------
+animations-home.js :
+
+  document.addEventListener('DOMContentLoaded', () => {
+      if (document.querySelector('.hero')) {
+          gsap.from('.hero h1', { y: 40, opacity: 0, duration: 1, ease: 'power2.out' });
+      }
+  });
+
+  - DOMContentLoaded : attendre que le HTML soit prêt.
+  - if (document.querySelector(...)) : ne rien faire si l'élément
+    n'existe pas sur la page.
+  - '.hero h1' : sélecteur CSS, comme en CSS. (J'ai entouré le titre de
+    front-page.php d'une <section class="hero"> pour pouvoir le cibler.)
+
+animations-shop.js :
+
+  document.addEventListener('DOMContentLoaded', () => {
+      gsap.registerPlugin(ScrollTrigger);   // activer le plugin (1 fois)
+
+      gsap.utils.toArray('ul.products li.product').forEach((produit) => {
+          gsap.from(produit, {
+              y: 60, opacity: 0, duration: 0.8, ease: 'power2.out',
+              scrollTrigger: { trigger: produit, start: 'top 85%' },
+          });
+      });
+  });
+
+  - gsap.utils.toArray(...) : récupère TOUS les produits dans une liste.
+  - forEach : une animation PAR produit (chacun se déclenche quand on
+    arrive dessus en scrollant).
+  - scrollTrigger : start: 'top 85%' = "quand le HAUT du produit atteint
+    85% de la hauteur de l'écran".
+  - 'ul.products li.product' : classes du HTML WooCommerce, trouvées
+    avec F12.
+
+Les propriétés courantes :
+  x, y           déplacement en px (y: 40 = 40px plus bas)
+  opacity        0 = invisible, 1 = visible
+  scale          taille (0.5 = moitié, 1 = normal)
+  rotation       en degrés
+  duration       durée en secondes
+  delay          attente avant de démarrer
+  ease           accélération ('power2.out', 'back.out', 'elastic'...)
+                 visualiseur : https://gsap.com/docs/v3/Eases
+  stagger        décalage entre plusieurs éléments (stagger: 0.1)
+
+Les 3 fonctions de base :
+  gsap.to(el, {...})     anime VERS cet état      (x: 100 = va à 100px)
+  gsap.from(el, {...})   anime DEPUIS cet état vers l'état normal
+                         (parfait pour faire APPARAÎTRE)
+  gsap.timeline()        enchaîner plusieurs animations :
+      const tl = gsap.timeline();
+      tl.from('.hero h1', { y: 40, opacity: 0 })
+        .from('.hero p',  { y: 20, opacity: 0 }, '-=0.3');  // 0.3s avant la fin du précédent
+
+---------------------------------------------------------------------
+10.5 Pièges
+---------------------------------------------------------------------
+1. Classes Tailwind "transition", "duration-300"... sur un élément animé
+   par GSAP => la transition CSS se bat avec GSAP => saccades.
+   Ne pas les mettre sur les éléments animés par GSAP.
+2. AJAX WooCommerce : WooCommerce remplace des bouts de page sans
+   recharger (panier mis à jour, mini-panier, filtres). Les nouveaux
+   éléments ne sont pas animés. Il faudra relancer l'animation sur les
+   événements jQuery de WooCommerce :
+       jQuery(document.body).on('updated_cart_totals', () => { ... });
+       jQuery(document.body).on('added_to_cart', () => { ... });
+3. "Flash" : avec gsap.from, l'élément est visible une fraction de
+   seconde, puis GSAP le cache et l'anime => il "saute". Solution :
+   le cacher en CSS (visibility: hidden) et utiliser autoAlpha
+   (= opacity + visibility) dans GSAP.
+4. Accessibilité : certaines personnes désactivent les animations dans
+   leur système (vertiges...). Les respecter avec :
+       gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {
+           // mes animations ici
+       });
+5. Erreur "gsap is not defined" dans la console (F12) => GSAP n'est pas
+   chargé avant mon script : vérifier les dépendances array( 'gsap' ),
+   et que assets/js/vendor/ existe (sinon : npm run vendor).
+
+
+=====================================================================
+11. PROCÉDURES À COPIER-COLLER
+=====================================================================
+
+Toutes les commandes npm se lancent dans le DOSSIER DU THÈME :
+  wp-content/themes/ma-boutique
+
+---------------------------------------------------------------------
+11.1 Ce qu'il y a (ou pas) dans git
+---------------------------------------------------------------------
+Dans git (= le code source, ce que J'ÉCRIS) :
+  package.json        la liste des outils et des commandes
+  package-lock.json   les versions EXACTES installées (ne pas supprimer :
+                      garantit les mêmes versions sur tous les PC)
+  src/input.css, scripts/, assets/js/animations-*.js, *.php, style.css
+
+PAS dans git (= GÉNÉRÉ, recréé par npm install) - voir .gitignore à la
+racine du projet :
+  node_modules/                 (des milliers de fichiers, lourd)
+  assets/js/vendor/             (copié depuis node_modules)
+  assets/css/main.css           (compilé par Tailwind)
+
+Pourquoi ? Un fichier généré se recrée en une commande. Le mettre dans
+git crée des conflits et du bruit à chaque compilation.
+
+Dans wp-content, on ne versionne QUE mon thème. Sont exclus :
+  wp-content/plugins/       WooCommerce : réinstallé depuis l'admin
+  wp-content/themes/twentytwenty*   thèmes par défaut de WordPress
+  wp-content/languages/     traductions : retéléchargées par WordPress
+  wp-content/uploads/       images envoyées via l'admin
+  wp-content/upgrade/       dossier temporaire de WordPress
+Aussi exclus : .env (mots de passe), .idea/ (PyCharm),
+_backup_underscores/ (ma sauvegarde locale).
+
+Comment c'est écrit dans .gitignore (technique "liste blanche") :
+    wp-content/*                     -> ignorer TOUT wp-content...
+    !wp-content/themes/              -> ...SAUF le dossier themes
+    wp-content/themes/*              -> ignorer tous les thèmes...
+    !wp-content/themes/ma-boutique/  -> ...SAUF le mien
+  Le "!" veut dire "ne PAS ignorer". On doit "rouvrir" chaque dossier
+  parent un par un, sinon git ne regarde même pas à l'intérieur.
+  Pour versionner un plugin à moi plus tard : ajouter
+      !wp-content/plugins/
+      wp-content/plugins/*
+      !wp-content/plugins/mon-plugin/
+
+Vérifier ce que git va prendre AVANT le premier commit :
+    git status              (liste des fichiers non suivis)
+    git check-ignore -v <fichier>   (dit QUELLE ligne ignore ce fichier)
+
+La procédure complète d'installation est aussi dans README.md (version
+GitHub, lisible par n'importe qui).
+
+Fichiers pour les assistants IA (Claude, Codex...) :
+    AGENTS.md   décrit le projet, ses règles, ses pièges, mes préférences
+                (réponses en français, mise à jour de ce fichier de notes)
+    CLAUDE.md   contient juste "@AGENTS.md" = "lis AGENTS.md"
+                (Claude Code lit CLAUDE.md, d'autres outils lisent
+                AGENTS.md : un seul vrai fichier à maintenir)
+
+La magie : dans package.json, le script "postinstall" se lance tout seul
+après "npm install" :
+    "postinstall": "npm run vendor && npm run build"
+=> npm install = installe les outils + copie GSAP + compile Tailwind.
+
+---------------------------------------------------------------------
+11.2 NOUVEL ORDINATEUR (le code est sur git)
+---------------------------------------------------------------------
+Prérequis à installer UNE fois sur le PC :
+  - git
+  - Docker + docker compose
+  - Node.js (version LTS) : https://nodejs.org   (npm est fourni avec)
+  Vérifier :
+      git --version
+      docker --version
+      node -v
+      npm -v
+
+Puis copier-coller :
+
+  # 1. Récupérer le projet
+  git clone <URL_DU_DEPOT> ma-boutique
+  cd ma-boutique
+
+  # 2. Les mots de passe de la base (le .env n'est pas dans git)
+  cp .env.example .env
+  #    -> ouvrir .env et mettre de vrais mots de passe
+
+  # 3. Installer Tailwind + GSAP et générer les fichiers
+  cd wp-content/themes/ma-boutique
+  npm ci
+  cd ../../..
+
+  # 4. Démarrer le site
+  docker compose up -d
+
+  # 5. Ouvrir http://localhost:8080/
+
+"npm ci" n'est PAS dans les scripts de package.json, c'est normal :
+  Il y a 2 sortes de commandes npm :
+    1. Les commandes INTÉGRÉES à npm (existent partout, pour tout projet) :
+         npm install, npm ci, npm update, npm init, npm audit...
+    2. MES scripts, écrits dans "scripts" de package.json, qu'on lance
+       avec "run" :
+         npm run build, npm run watch, npm run vendor
+  => "run" = "lance le script de package.json qui porte ce nom".
+     Sans "run", npm cherche une de SES commandes à lui.
+  Liste de mes scripts : npm run   (sans rien après)
+
+  Cas particulier : "postinstall" est dans mes scripts, mais je ne le
+  lance jamais moi-même. C'est un nom RÉSERVÉ ("lifecycle script") :
+  npm le lance tout seul après npm install / npm ci.
+  (Il existe aussi preinstall, prebuild/postbuild... : "pre" + nom =
+   avant, "post" + nom = après.)
+
+  ci = "clean install" (installation propre). Le nom vient de
+  "Continuous Integration" : les serveurs qui testent le code
+  automatiquement l'utilisent, car ils ont besoin d'une installation
+  identique à chaque fois. Ce que fait npm ci :
+    1. SUPPRIME node_modules/ (repart de zéro)
+    2. installe EXACTEMENT les versions de package-lock.json
+    3. ne modifie JAMAIS package.json ni package-lock.json
+    4. s'ARRÊTE avec une erreur si package.json et package-lock.json ne
+       sont pas d'accord (au lieu de "réparer" en silence)
+  => C'est la commande la plus sûre pour récupérer le projet.
+
+npm ci vs npm install :
+  npm ci      = installe EXACTEMENT les versions de package-lock.json.
+                À utiliser sur un nouveau PC / après un git pull.
+  npm install = installe, et peut mettre à jour package-lock.json.
+                À utiliser quand j'AJOUTE un outil (npm install xxx).
+  Les deux lancent le postinstall (vendor + build).
+
+ATTENTION : git ne contient que le CODE. Sur un nouveau PC, la base de
+données (produits, pages, réglages, logo...), WooCommerce et
+wp-content/uploads/ ne sont PAS récupérés. Sur une base neuve :
+  1. http://localhost:8080/ : installation de WordPress (langue, admin)
+  2. Extensions > Ajouter : installer + activer WooCommerce
+  3. Apparence > Thèmes : activer ma-boutique
+  4. Réglages > Permaliens : "Titre de la publication"
+  5. Produits > Importer : pizzas_woocommerce.csv puis
+     accompaniements_woocommerce.csv
+  6. Apparence > Personnaliser > Identité du site : le logo
+  7. WooCommerce > Réglages > Visibilité du site : "En ligne"
+Ou, pour avoir EXACTEMENT les mêmes données : phpMyAdmin
+(http://127.0.0.1:8082/) > Exporter sur l'ancien PC / Importer sur le
+nouveau, + copier le dossier wp-content/uploads/.
+
+Avant "docker compose up -d", donner les droits au conteneur :
+    chmod -R 777 wp-content      (local uniquement, voir Note_importante.txt)
+
+Problème de droits sur wp-content : voir Note_importante.txt.
+
+---------------------------------------------------------------------
+11.3 TOUS LES JOURS (pour coder)
+---------------------------------------------------------------------
+  cd wp-content/themes/ma-boutique
+  npm run watch
+  # laisser tourner dans un terminal, coder, sauvegarder, Ctrl+F5
+  # Ctrl+C pour arrêter
+
+  Si quelqu'un (ou moi sur un autre PC) a ajouté un outil :
+  git pull
+  npm ci
+
+---------------------------------------------------------------------
+11.4 AVANT UNE MISE EN LIGNE
+---------------------------------------------------------------------
+  cd wp-content/themes/ma-boutique
+  npm run build      # CSS minifié
+  npm run vendor     # (déjà fait par npm install, au cas où)
+
+  Envoyer le thème SANS node_modules/ (inutile sur le serveur), mais AVEC
+  assets/css/main.css et assets/js/vendor/ (indispensables : le serveur
+  n'a pas forcément Node.js).
+
+---------------------------------------------------------------------
+11.5 RÉCAP DES COMMANDES
+---------------------------------------------------------------------
+  npm ci              installer tout (nouveau PC, après git pull)
+  npm install xxx     ajouter un outil/une librairie
+  npm run watch       compiler Tailwind en continu (pendant que je code)
+  npm run build       compiler Tailwind minifié (avant mise en ligne)
+  npm run vendor      recopier GSAP dans assets/js/vendor/
+  npm update gsap     mettre à jour GSAP
+
+---------------------------------------------------------------------
+11.6 Si ça ne marche pas
+---------------------------------------------------------------------
+  - Site sans style / "gsap is not defined" en console
+      => npm ci n'a pas été lancé : main.css ou vendor/ n'existent pas.
+  - Une classe Tailwind ne marche pas
+      => npm run watch ne tourne pas. Puis Ctrl+F5.
+  - "npm: command not found"
+      => Node.js n'est pas installé.
+  - Message "npm warn allow-scripts ... @parcel/watcher"
+      => normal, sans conséquence (Tailwind fonctionne, watch compris).
+  - Message "4 high severity vulnerabilities" (paquet "braces")
+      => concerne seulement l'outil Tailwind sur MON PC (jamais envoyé au
+         site). NE PAS lancer "npm audit fix --force" : ça rétrograde
+         Tailwind et peut tout casser. Attendre une mise à jour de
+         Tailwind (npm update).
+  - Tout est cassé côté npm => repartir propre :
+      rm -r node_modules
+      npm ci
+
+
+=====================================================================
+12. HISTORIQUE
+=====================================================================
+
+[2026-10-14]
+- Thème créé avec underscores.me, puis compris son fonctionnement.
+- Découverte : le mode "Coming soon" de WooCommerce masquait mon thème.
+- Tout le code Underscores déplacé dans ./_backup_underscores/
+  (sauvegarde, peut être supprimé plus tard).
+- Création d'un thème minimal (style.css, functions.php, header.php,
+  footer.php, index.php, front-page.php).
+- Le CSS par défaut de WooCommerce est de nouveau actif (Underscores le
+  désactivait avec le filtre woocommerce_enqueue_styles).
+
+- Compris la page produit : surcharge de template vs hooks (partie 4.6).
+
+[2026-10-22]
+- Ajout du logo (custom-logo). Piège : taille sur la div au lieu de
+  l'image (partie 7.1).
+- Installation de Tailwind CSS v4.3.3 dans le thème (partie 9).
+- Installation de GSAP 3.15.0 + ScrollTrigger (partie 10) :
+  animations-home.js (titre de l'accueil), animations-shop.js (produits
+  au scroll), chargés seulement sur leur page (conditions dans
+  functions.php). <section class="hero"> ajoutée dans front-page.php.
+- Ajout de "vendor" et "postinstall" dans package.json, et des fichiers
+  générés dans .gitignore. Procédures nouveau PC / mise en ligne
+  (partie 11).
+- Préparation pour GitHub : .gitignore en "liste blanche" (seul mon thème
+  dans wp-content), README.md (installation), AGENTS.md + CLAUDE.md
+  (instructions pour les assistants IA) (partie 11.1).
+
+(suite à compléter...)

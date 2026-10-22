@@ -1,0 +1,42 @@
+# =====================================================================
+# Secrets
+# =====================================================================
+.env
+
+# =====================================================================
+# wp-content : on ne versionne QUE notre thème
+# ---------------------------------------------------------------------
+# Tout le reste est réinstallable ou propre à chaque machine :
+#   plugins/ (WooCommerce : installé depuis l'admin), themes/twentytwenty*,
+#   languages/, upgrade/, uploads/ (images envoyées via l'admin).
+# Pour versionner un autre dossier plus tard : ajouter une ligne "!..."
+# =====================================================================
+wp-content/*
+!wp-content/index.php
+!wp-content/themes/
+wp-content/themes/*
+!wp-content/themes/index.php
+!wp-content/themes/ma-boutique/
+
+# =====================================================================
+# Thème : fichiers générés, recréés par "npm ci" (script postinstall)
+# =====================================================================
+node_modules/
+wp-content/themes/ma-boutique/assets/js/vendor/
+wp-content/themes/ma-boutique/assets/css/main.css
+npm-debug.log*
+
+# =====================================================================
+# Sauvegarde locale du code Underscores d'origine (pas utile dans git)
+# =====================================================================
+_backup_underscores/
+
+# =====================================================================
+# Éditeurs / IA / système
+# =====================================================================
+.idea/
+.vscode/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+*.swp

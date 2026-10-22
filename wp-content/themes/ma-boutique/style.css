@@ -1,0 +1,30 @@
+/*!
+Theme Name: ma-boutique
+Theme URI: http://underscores.me/
+Author: Eddie Rajaonar
+Author URI: http://underscores.me/
+Description: Ma-boutique is a WooCommerce custom theme for restaurants, made by raindad.
+Version: 1.0.0
+Tested up to: 5.4
+Requires PHP: 5.6
+License: GNU General Public License v2 or later
+License URI: LICENSE
+Text Domain: ma-boutique
+Tags: custom-background, custom-logo, custom-menu, featured-images, threaded-comments, translation-ready
+
+This theme, like WordPress, is licensed under the GPL.
+Use it to make something cool, have fun, and share what you've learned.
+
+*/
+
+body {
+	margin: 0;
+	font-family: system-ui, sans-serif;
+}
+
+header img {
+	width: 200px;
+	height: 200px;
+	object-fit: contain; /* garde les proportions sans déformer */
+}
+

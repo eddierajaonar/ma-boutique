@@ -1,0 +1,11 @@
+---------------------------------
+verrouillage dossier wp-content
+---------------------------------
+l'image docker utilise l'utilisateur 'www-data' comme propriétaire du dossier dans l'image. toute modification sur UI passe donc par lui.
+
+pour pouvoir editer ce dossier:
+$ chown -R "$USER":"$USER" wp-content  => 'eddie' deivient propriétaire du dossier. donc peut editer les codes.
+
+REMARQUES: comme eddie devient le propriétaire, on ne peut plus faire des modifs via UI. pour éviter cela:
+---------
+$ chmod -R 777 wp-content

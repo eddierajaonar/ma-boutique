@@ -1,0 +1,23 @@
+{
+  "name": "ma-boutique",
+  "version": "1.0.0",
+  "description": "Thème WooCommerce custom Ma Boutique",
+  "scripts": {
+    "build": "tailwindcss -i ./src/input.css -o ./assets/css/main.css --minify",
+    "watch": "tailwindcss -i ./src/input.css -o ./assets/css/main.css --watch",
+    "vendor": "node scripts/copy-vendor.js",
+    "postinstall": "npm run vendor && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  },
+  "private": true,
+  "dependencies": {
+    "gsap": "^3.15.0"
+  }
+}

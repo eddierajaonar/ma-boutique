@@ -1,0 +1,8 @@
+/* Point d'entrée Tailwind : ce fichier est compilé vers assets/css/main.css */
+
+/* source(none) : on désactive la détection automatique et on dit nous-mêmes où chercher les classes. */
+@import "tailwindcss" source(none);
+
+/* Tailwind lit tous les fichiers .php du thème pour trouver les classes utilisées. */
+@source "../**/*.php";
+@source not "../node_modules";

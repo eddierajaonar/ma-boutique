@@ -1,0 +1,11 @@
+ID,Type,SKU,Name,Published,Is featured?,Visibility in catalog,Short description,Description,Tax status,In stock?,Stock,Backorders allowed?,Sold individually?,Allow customer reviews?,Regular price,Categories,Images
+,simple,ACC-001,Garlic Bread,1,0,visible,Toasted baguette with garlic butter and herbs.,,taxable,1,10,0,0,1,4.50,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Garlicbread.jpg
+,simple,ACC-002,Caesar Salad,1,0,visible,"Romaine lettuce, parmesan, croutons and Caesar dressing.",,taxable,1,10,0,0,1,6.50,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Cesar_salad.jpg
+,simple,ACC-003,French Fries,1,0,visible,Crispy golden fries with sea salt.,,taxable,1,10,0,0,1,4.00,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/French_Fries.JPG
+,simple,ACC-004,Bruschetta,1,0,visible,"Grilled bread topped with fresh tomatoes, garlic and basil.",,taxable,1,10,0,0,1,5.00,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Bruschetta.jpg
+,simple,ACC-005,Chicken Wings,1,0,visible,Crispy chicken wings with spicy buffalo sauce.,,taxable,1,10,0,0,1,8.00,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Coast_Guard_buffalo_chicken_wings.jpg
+,simple,ACC-006,Tiramisu,1,0,visible,Classic Italian dessert with espresso and mascarpone.,,taxable,1,10,0,0,1,5.50,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Tiramisu.jpg
+,simple,ACC-007,Pantesca Salad,1,0,visible,"Sicilian salad with potatoes, tomatoes, capers, olives and oregano.",,taxable,1,10,0,0,1,6.50,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Insalata_pantesca.jpg
+,simple,ACC-008,Sicilian Scacce,1,0,visible,Sicilian stuffed flatbread with tomato sauce and ricotta.,,taxable,1,10,0,0,1,6.00,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Scacce_salsa-ricotta.jpg
+,simple,ACC-009,Antipasti Platter,1,0,visible,Selection of Sicilian antipasti to share.,,taxable,1,10,0,0,1,9.00,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Antipasti_di_Sicilia.jpg
+,simple,ACC-010,Whole Wheat Soda Bread,1,0,visible,Rustic whole wheat soda bread.,,taxable,1,10,0,0,1,3.50,accompaniements,https://commons.wikimedia.org/wiki/Special:FilePath/Soda_bread.jpg
