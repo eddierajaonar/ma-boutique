@@ -4,7 +4,7 @@
  */
 document.addEventListener('DOMContentLoaded', () => {
 	// Le titre apparaît en montant.
-	if (document.querySelector('.hero')) {
-		gsap.from('.hero h1', { y: 40, opacity: 0, duration: 1, ease: 'power2.out' });
+	if (document.querySelector('.home-hero')) {
+		gsap.from('.home-hero h1', { y: 40, opacity: 0, duration: 1, ease: 'power2.out' });
 	}
 });

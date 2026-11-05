@@ -4,7 +4,7 @@ Boutique WooCommerce pour un restaurant (pizzas, accompagnements), avec un **th�
 
 - **WordPress** + **WooCommerce**, lancés avec **Docker** (MariaDB, WordPress/Apache PHP 8.3, phpMyAdmin)
 - Thème classique en PHP : `wp-content/themes/ma-boutique/`
-- **Tailwind CSS v4** pour le style, **GSAP** (+ ScrollTrigger) pour les animations
+- **Tailwind CSS v4** + **daisyUI 5** pour le style, **GSAP** (+ ScrollTrigger) pour les animations
 
 > Projet d'apprentissage : les explications détaillées (hiérarchie des templates, surcharge WooCommerce, hooks, Tailwind, GSAP…) se trouvent dans [`Formation_theme_woocommerce.txt`](Formation_theme_woocommerce.txt).
 

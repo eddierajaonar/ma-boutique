@@ -537,6 +537,63 @@ Ordre de priorité à retenir (du plus faible au plus fort) :
   attributs HTML width/height  <  CSS des fichiers (selon spécificité)
   <  style="..." en ligne  <  !important
 
+PIÈGE VÉCU n°3 : l'image d'en-tête (header_image() dans front-page.php)
+se collait À GAUCHE au lieu de prendre toute la largeur de <main>.
+Pourquoi :
+  - Une <img> est "inline" : elle prend SA taille (attribut width = la
+    taille du fichier), pas celle de son parent.
+  - Le Preflight de Tailwind met "img { max-width: 100%; height: auto; }"
+    => l'image peut RÉTRÉCIR si elle est trop grande, mais elle ne
+    s'AGRANDIT jamais. Si elle est plus petite que <main>, il reste du
+    vide à droite.
+Solution : dire à l'image de prendre 100 % de la largeur du parent :
+     <img class="w-full h-auto" alt="" src="<?php header_image(); ?>" ...>
+  w-full = width: 100%   (prend toute la largeur du parent)
+  h-auto = height: auto  (la hauteur suit => pas d'image déformée)
+Variante bannière de hauteur fixe (l'image est rognée, pas déformée) :
+     class="w-full h-64 object-cover"
+Attention : si l'image d'origine est petite, l'agrandir la rend floue
+=> envoyer une image assez large (ex : 1920 px) dans Personnaliser >
+Image d'en-tête.
+
+PIÈGE au passage : "max-w-8xl" (dans header.php) N'EXISTE PAS dans
+Tailwind (l'échelle s'arrête à max-w-7xl = 80rem). Une classe inconnue
+est simplement ignorée => <main> n'a AUCUNE largeur max (toute la page).
+Pour une largeur max : max-w-7xl (ou créer --container-8xl dans
+src/input.css avec @theme).
+
+
+---------------------------------------------------------------------
+7.2 Cacher la barre d'administration (le bandeau noir en haut)
+---------------------------------------------------------------------
+C'est la "barre d'outils" (admin bar). Elle ne s'affiche QUE pour les
+utilisateurs CONNECTÉS : les clients/visiteurs ne la voient jamais
+(sauf les clients connectés à leur compte, voir solution 3).
+
+Elle est injectée par wp_head() (son CSS + un décalage "margin-top" sur
+<html>) et wp_footer() / wp_body_open() (son HTML).
+
+Solution 1 - sans code, juste pour MOI :
+  Admin > Comptes (Utilisateurs) > Profil > décocher
+  "Afficher la barre d'outils lorsque vous visitez le site".
+
+Solution 2 - pour TOUT LE MONDE, dans functions.php :
+  add_filter( 'show_admin_bar', '__return_false' );
+  (__return_false = petite fonction WordPress qui renvoie toujours false)
+
+Solution 3 - la garder pour les admins, la cacher pour les autres
+(ex : un client connecté à "Mon compte") :
+  add_filter( 'show_admin_bar', function ( $show ) {
+      return current_user_can( 'manage_options' ) ? $show : false;
+  } );
+  (manage_options = droit réservé aux administrateurs)
+
+Note : WooCommerce cache déjà la barre pour les clients par défaut.
+
+Conseil : la garder pendant le développement (liens "Modifier",
+"Personnaliser"... pratiques). Ne PAS la cacher en CSS (display:none) :
+le décalage en haut de page resterait.
+
 
 =====================================================================
 8. ASTUCES DE DÉBOGAGE
@@ -684,6 +741,50 @@ PIÈGE : "Preflight" = la remise à zéro CSS de Tailwind. Tous les titres
 
 Mise en ligne : envoyer assets/css/main.css (compilé avec npm run build),
 pas besoin d'envoyer node_modules/ ni src/.
+
+---------------------------------------------------------------------
+9.6 daisyUI (plugin de composants pour Tailwind)
+---------------------------------------------------------------------
+daisyUI (v5) ajoute à Tailwind des classes de COMPOSANTS toutes prêtes :
+  btn, btn-primary, navbar, menu, dropdown, card, badge, modal...
+  => <a class="btn btn-primary">  au lieu de 10 classes Tailwind.
+Doc + liste des composants : https://daisyui.com/components/
+
+Ce n'est PAS un fichier à charger dans WordPress : c'est un PLUGIN de
+Tailwind. Ses classes sont ajoutées dans assets/css/main.css au moment de
+la compilation (comme les classes Tailwind : seulement celles utilisées).
+=> rien à changer dans functions.php.
+
+Installation (déjà faite) :
+  cd wp-content/themes/ma-boutique
+  npm install -D daisyui           (-D : outil de compilation)
+
+Puis dans src/input.css, APRÈS @import "tailwindcss" :
+  @plugin "daisyui" {
+      themes: light --default;
+  }
+  - @plugin = "active ce plugin de Tailwind".
+  - themes: light --default = n'utiliser que le thème clair.
+    Sans ça, daisyUI active aussi le thème sombre AUTOMATIQUEMENT pour les
+    visiteurs dont l'ordinateur est en mode sombre (couleurs inversées).
+    Autres thèmes possibles : https://daisyui.com/docs/themes/
+      ex : themes: light --default, dark --prefersdark;
+
+Puis recompiler : npm run build (ou laisser tourner npm run watch).
+Sur un autre PC : rien de plus, npm ci l'installe (il est dans
+package.json).
+
+Les couleurs daisyUI (dépendent du thème choisi) :
+  primary, secondary, accent, neutral, base-100/200/300, info, success,
+  warning, error
+  => utilisables partout : btn-primary, bg-base-100, text-primary...
+
+PIÈGE : daisyUI a des noms de classes "courants" qui peuvent entrer en
+  collision avec les miens ou ceux de WooCommerce. Ex : .hero est un
+  composant daisyUI (display grid, contenu centré) => ma
+  <section class="hero"> de front-page.php reçoit ce style.
+  Si un élément a un style "bizarre" : F12 > Styles pour voir d'où vient
+  la règle.
 
 
 =====================================================================
@@ -1147,5 +1248,11 @@ Problème de droits sur wp-content : voir Note_importante.txt.
 - Préparation pour GitHub : .gitignore en "liste blanche" (seul mon thème
   dans wp-content), README.md (installation), AGENTS.md + CLAUDE.md
   (instructions pour les assistants IA) (partie 11.1).
+- Installation de daisyUI 5.7.50 (partie 9.6).
+
+[2026-11-05]
+- Image d'en-tête de l'accueil en pleine largeur : class="w-full h-auto"
+  sur l'<img> (partie 7.1, PIÈGE VÉCU n°3). Découvert : max-w-8xl
+  n'existe pas dans Tailwind.
 
 (suite à compléter...)

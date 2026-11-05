@@ -8,7 +8,14 @@ function ma_boutique_setup() {
 	add_theme_support( 'title-tag' );       // WordPress gère la balise <title>.
 	add_theme_support( 'post-thumbnails' ); // Images à la une (et images produits).
 	add_theme_support( 'woocommerce' );     // Déclare que le thème supporte WooCommerce.
-	add_theme_support( 'custom-header' );
+	$args = array(
+	'flex-width'    => true,
+	'width'         => 1400,
+	'flex-height'   => true,
+	'height'        => 100,
+	'default-image' => get_template_directory_uri() . '/assets/images/section_home.jpg',
+);
+add_theme_support( 'custom-header', $args );
 	add_theme_support( 'automatic-feed-links' );
 	add_theme_support( 'html5', array( 'comment-list', 'comment-form', 'search-form', 'gallery', 'caption' ) );
 	add_theme_support( 'customize-selective-refresh-widgets' );

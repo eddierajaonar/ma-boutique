@@ -6,3 +6,8 @@
 /* Tailwind lit tous les fichiers .php du thème pour trouver les classes utilisées. */
 @source "../**/*.php";
 @source not "../node_modules";
+
+/* daisyUI : composants (btn, navbar, menu, card...). Thème "light" uniquement, pour ne pas passer en sombre automatiquement. */
+@plugin "daisyui" {
+	themes: light --default;
+}

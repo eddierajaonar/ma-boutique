@@ -17,14 +17,12 @@ Use it to make something cool, have fun, and share what you've learned.
 
 */
 
+html {
+	background-color: oklch(96.7% 0.003 264.542);
+}
+
 body {
 	margin: 0;
 	font-family: system-ui, sans-serif;
-}
-
-header img {
-	width: 200px;
-	height: 200px;
-	object-fit: contain; /* garde les proportions sans déformer */
 }
 

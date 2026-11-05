@@ -5,10 +5,12 @@
 
 get_header();
 ?>
-
-<section class="hero">
-	<h1 class="text-3xl font-bold text-red-600">Accueil de ma boutique</h1>
-</section>
+<!-- Image section-->
+<div>
+	<img class="w-full h-auto" alt="" src="<?php header_image(); ?>"
+	width="<?php echo absint( get_custom_header()->width ); ?>" 
+	height="<?php echo absint( get_custom_header()->height ); ?>">
+</div>
 
 <?php
 get_footer();
